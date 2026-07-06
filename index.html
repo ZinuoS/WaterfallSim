@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>The Waterfall — a CLO Simulator</title>
+<!-- Fully self-contained: no CDN, no external requests. Google Fonts loads if online; falls back to Georgia/Consolas offline. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&family=IBM+Plex+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a120f;
+    --panel: #101b16;
+    --panel2: #14211b;
+    --border: #24382e;
+    --border-lit: #3a5a49;
+    --ink: #e8e3d3;
+    --muted: #8fa196;
+    --faint: #5c6f64;
+    --gold: #d4af5f;
+    --gold-dim: #9a7f42;
+    --red: #e05b52;
+    --green: #6fbf8f;
+    --serif: 'Fraunces', Georgia, 'Times New Roman', serif;
+    --mono: 'IBM Plex Mono', Consolas, 'SF Mono', Menlo, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    background:
+      radial-gradient(1200px 500px at 75% -10%, rgba(212,175,95,.07), transparent 60%),
+      radial-gradient(900px 600px at -10% 110%, rgba(91,141,190,.05), transparent 55%),
+      repeating-linear-gradient(0deg, transparent 0 47px, rgba(232,227,211,.018) 47px 48px),
+      var(--bg);
+    color: var(--ink);
+    font-family: var(--mono);
+    padding: 34px clamp(18px, 4vw, 56px) 60px;
+    min-height: 100vh;
+  }
+  header { margin-bottom: 30px; animation: rise .7s cubic-bezier(.2,.7,.2,1) both; }
+  .eyebrow { color: var(--gold); font-size: 11px; letter-spacing: 3.5px; text-transform: uppercase; }
+  h1 { font-family: var(--serif); font-weight: 560; font-size: clamp(30px, 4.4vw, 46px);
+    letter-spacing: .2px; margin: 8px 0 6px; line-height: 1.05; }
+  h1 em { font-style: italic; color: var(--gold); font-weight: 420; }
+  .sub { color: var(--muted); font-size: 12.5px; max-width: 720px; line-height: 1.7; }
+  .rule { height: 1px; background: linear-gradient(90deg, var(--gold-dim), transparent 70%); margin: 22px 0 26px; }
+  .layout { display: grid; grid-template-columns: 300px 1fr; gap: 20px; align-items: start; }
+  @media (max-width: 980px) { .layout { grid-template-columns: 1fr; } }
+  .panel {
+    background: linear-gradient(180deg, var(--panel2), var(--panel));
+    border: 1px solid var(--border); border-radius: 4px; padding: 20px;
+    animation: rise .7s cubic-bezier(.2,.7,.2,1) both;
+  }
+  .panel + .panel { margin-top: 18px; }
+  .panel h2 { font-family: var(--serif); font-weight: 500; font-size: 17px; letter-spacing: .3px; margin-bottom: 4px; }
+  .panel .note { color: var(--faint); font-size: 11px; line-height: 1.6; margin-bottom: 14px; }
+  .ptitle { font-size: 10.5px; letter-spacing: 2.5px; text-transform: uppercase; color: var(--gold); margin-bottom: 14px; }
+  .ctitle { font-family: var(--serif); font-size: 15px; color: var(--ink); margin-bottom: 10px; }
+  .slider-group { margin-bottom: 18px; }
+  .slider-group label { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--muted); margin-bottom: 7px; }
+  .slider-group label b { color: var(--ink); font-weight: 500; }
+  input[type=range] { width: 100%; accent-color: var(--gold); height: 3px; }
+  .presets { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 4px; }
+  .presets button, .playbtn {
+    background: transparent; color: var(--muted); border: 1px solid var(--border); border-radius: 3px;
+    padding: 9px 6px; font-size: 11px; font-family: inherit; letter-spacing: .5px; cursor: pointer;
+    transition: all .18s ease;
+  }
+  .presets button:hover, .playbtn:hover { border-color: var(--gold); color: var(--gold); background: rgba(212,175,95,.06); }
+  .presets button.active { border-color: var(--gold); color: var(--gold); }
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 20px; }
+  @media (max-width: 980px) { .kpis { grid-template-columns: repeat(2, 1fr); } }
+  .kpi { background: linear-gradient(180deg, var(--panel2), var(--panel)); border: 1px solid var(--border);
+    border-radius: 4px; padding: 16px 18px; animation: rise .7s cubic-bezier(.2,.7,.2,1) both; }
+  .kpi:nth-child(2) { animation-delay: .06s } .kpi:nth-child(3) { animation-delay: .12s } .kpi:nth-child(4) { animation-delay: .18s }
+  .kpi .lbl { font-size: 10px; text-transform: uppercase; letter-spacing: 2px; color: var(--faint); }
+  .kpi .val { font-family: var(--serif); font-size: 30px; font-weight: 550; margin-top: 6px; }
+  .ok { color: var(--green); } .bad { color: var(--red); } .warn { color: var(--gold); }
+  .cascade-head { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 10px; margin-bottom: 6px; }
+  .qctl { display: flex; align-items: center; gap: 12px; margin: 12px 0 22px; }
+  .qctl input[type=range] { flex: 1; }
+  .qlabel { font-size: 11.5px; color: var(--gold); min-width: 130px; text-align: right; }
+  .cascade { position: relative; padding-left: 26px; }
+  .cascade::before {
+    content: ''; position: absolute; left: 7px; top: 10px; bottom: 10px; width: 2px;
+    background: linear-gradient(180deg, var(--gold) 0%, var(--gold-dim) 60%, #c94f4f);
+    opacity: .5;
+  }
+  .drop {
+    position: absolute; left: 3px; top: 0; width: 10px; height: 10px; border-radius: 50%;
+    background: var(--gold); box-shadow: 0 0 12px 3px rgba(212,175,95,.55);
+    animation: fall 1.9s cubic-bezier(.4,0,.6,1) both;
+  }
+  @keyframes fall { from { top: 0; opacity: 1 } 85% { opacity: 1 } to { top: calc(100% - 10px); opacity: 0 } }
+  .node {
+    position: relative; display: grid; grid-template-columns: 1fr auto; gap: 4px 14px; align-items: center;
+    border: 1px solid var(--border); border-radius: 3px; background: rgba(10,18,15,.55);
+    padding: 10px 14px; margin-bottom: 8px;
+    opacity: 0; transform: translateY(-6px);
+    animation: nodein .4s ease forwards; animation-delay: calc(var(--i) * 110ms);
+  }
+  @keyframes nodein { to { opacity: 1; transform: none } }
+  @keyframes rise { from { opacity: 0; transform: translateY(14px) } to { opacity: 1; transform: none } }
+  .node::before { content: ''; position: absolute; left: -23px; top: 50%; width: 14px; height: 1px; background: var(--gold-dim); opacity: .6; }
+  .node .nm { font-size: 11.5px; color: var(--muted); letter-spacing: .4px; }
+  .node .nm b { color: var(--ink); font-weight: 500; }
+  .node .amt { font-size: 12.5px; color: var(--ink); text-align: right; white-space: nowrap; }
+  .node .bar { grid-column: 1 / -1; height: 3px; background: rgba(232,227,211,.08); border-radius: 2px; overflow: hidden; }
+  .node .bar i { display: block; height: 100%; background: var(--gold); border-radius: 2px;
+    width: calc(var(--w) * 1%); transition: width .5s cubic-bezier(.2,.7,.2,1); }
+  .node.paidfull .bar i { background: var(--green); }
+  .node.short .bar i { background: var(--red); }
+  .node.short .amt { color: var(--red); }
+  .node.gate { border-style: dashed; }
+  .node.gate.pass { border-color: var(--border-lit); }
+  .node.gate.fail { border-color: var(--red); background: rgba(224,91,82,.06); }
+  .node.gate .nm b { font-family: var(--serif); font-size: 13px; letter-spacing: .5px; }
+  .gatechip { font-size: 10px; letter-spacing: 1px; padding: 3px 9px; border-radius: 2px; text-transform: uppercase; }
+  .gatechip.pass { color: var(--green); border: 1px solid rgba(111,191,143,.4); }
+  .gatechip.fail { color: var(--red); border: 1px solid rgba(224,91,82,.5); animation: blink 1.1s ease infinite; }
+  @keyframes blink { 50% { opacity: .45 } }
+  .divert {
+    grid-column: 1 / -1; font-size: 10.5px; color: var(--red); letter-spacing: .4px;
+    padding: 6px 10px; margin-top: 2px; border-left: 2px solid var(--red);
+    background: linear-gradient(90deg, rgba(224,91,82,.10), transparent 70%);
+  }
+  .divert b { color: var(--ink); }
+  .node.eqnode { border-color: rgba(201,79,79,.55); }
+  .node.eqnode .bar i { background: #c94f4f; }
+  .node.eqnode .nm b { color: #c94f4f; }
+  .prinlist { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; }
+  .princhip { font-size: 10.5px; padding: 3px 9px; border: 1px solid var(--border-lit); border-radius: 2px; color: var(--muted); }
+  .princhip b { color: var(--ink); }
+  .legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: 10.5px; color: var(--muted); margin-bottom: 8px; }
+  .legend span::before { content: '■ '; }
+  svg text { font-family: var(--mono); font-size: 10px; fill: var(--faint); }
+  svg .axis line, svg .axis path { stroke: #1c2b23; }
+  table { width: 100%; border-collapse: collapse; font-size: 11.5px; margin-top: 8px; }
+  th, td { text-align: right; padding: 7px 8px; border-bottom: 1px solid var(--border); }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--faint); font-weight: 400; font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; }
+  .toggle { margin-top: 14px; font-size: 11.5px; color: var(--gold); cursor: pointer; user-select: none; letter-spacing: .5px; }
+  .toggle:hover { text-decoration: underline; }
+  #deepdive { display: none; } #deepdive.open { display: block; }
+  .assump { font-size: 11px; color: var(--muted); line-height: 1.8; margin-top: 12px; }
+  .assump b { color: var(--ink); font-weight: 500; }
+  .badge { display: inline-block; font-size: 10px; padding: 2px 9px; border-radius: 2px; letter-spacing: 1px; }
+  .badge.pass { color: var(--green); border: 1px solid rgba(111,191,143,.4); }
+  .badge.fail { color: var(--red); border: 1px solid rgba(224,91,82,.5); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="eyebrow">Structured Credit · Desk Rotation Capstone</div>
+  <h1>The <em>Waterfall</em> — anatomy of a CLO</h1>
+  <div class="sub">A $500M synthetic broadly-syndicated loan pool, six tranches, an 8-year life with 5 years of reinvestment.
+  Set the credit environment on the left; watch every dollar of collections trickle through the priority of payments.</div>
+  <div class="rule"></div>
+</header>
+
+<div class="kpis">
+  <div class="kpi"><div class="lbl">Equity IRR</div><div class="val" id="kIrr">—</div></div>
+  <div class="kpi"><div class="lbl">Cumulative credit loss</div><div class="val" id="kLoss">—</div></div>
+  <div class="kpi"><div class="lbl">OC test breaches</div><div class="val" id="kOc">—</div></div>
+  <div class="kpi"><div class="lbl">Deepest impairment</div><div class="val" id="kImp">—</div></div>
+</div>
+
+<div class="layout">
+  <div>
+    <div class="panel" style="animation-delay:.05s">
+      <div class="ptitle">Credit environment</div>
+      <div class="slider-group">
+        <label>Annual default rate (CDR) <b id="cdrV">3.0%</b></label>
+        <input type="range" id="cdr" min="0" max="30" step="0.5" value="3">
+      </div>
+      <div class="slider-group">
+        <label>Recovery rate <b id="recV">60%</b></label>
+        <input type="range" id="rec" min="20" max="80" step="1" value="60">
+      </div>
+      <div class="slider-group">
+        <label>Annual prepayment (CPR) <b id="cprV">15%</b></label>
+        <input type="range" id="cpr" min="0" max="30" step="1" value="15">
+      </div>
+      <div class="ptitle" style="margin-top:20px;">Scenarios</div>
+      <div class="presets">
+        <button onclick="preset(this,2,65,20)">Benign</button>
+        <button onclick="preset(this,3,60,15)" class="active">Base case</button>
+        <button onclick="preset(this,8,50,5)">GFC-style</button>
+        <button onclick="preset(this,15,40,2)">Severe tail</button>
+      </div>
+      <div class="toggle" onclick="document.getElementById('deepdive').classList.toggle('open'); redraw();">▸ Deep-dive — OC mechanics &amp; model validation</div>
+    </div>
+    <div class="panel" style="animation-delay:.12s">
+      <div class="ptitle">Tranche outcomes</div>
+      <table id="trancheTable"></table>
+    </div>
+  </div>
+
+  <div>
+    <div class="panel" style="animation-delay:.08s">
+      <div class="cascade-head">
+        <div>
+          <h2>Priority of payments</h2>
+          <div class="note">One quarter's collections, top to bottom. Dashed nodes are coverage tests — when they fail, cash is seized and diverted to senior paydown.</div>
+        </div>
+        <button class="playbtn" id="playBtn" onclick="togglePlay()">▶ &nbsp;Play deal life</button>
+      </div>
+      <div class="qctl">
+        <input type="range" id="qtr" min="1" max="32" step="1" value="8">
+        <div class="qlabel" id="qLabel">Quarter 8 · Year 2</div>
+      </div>
+      <div class="cascade" id="cascade"></div>
+    </div>
+
+    <div class="panel" style="animation-delay:.14s">
+      <div class="ctitle">Capital structure through time</div>
+      <div class="legend" id="stackLegend"></div>
+      <div id="stack"></div>
+    </div>
+    <div class="panel" style="animation-delay:.2s">
+      <div class="ctitle">Equity distributions by quarter</div>
+      <div id="eqcf"></div>
+    </div>
+    <div id="deepdive">
+      <div class="panel">
+        <div class="ctitle">Overcollateralization — the self-correcting machine</div>
+        <div class="legend"><span style="color:#5b8dbe">Senior OC</span><span style="color:#d9a441">Junior OC</span><span style="color:var(--faint)">dashed = trigger</span></div>
+        <div id="octests"></div>
+        <div class="assump">
+          <b>Model assumptions</b> — Assets: SOFR+385bp (incl. amortized OID) on performing balance · base rate flat 4.00% · defaults on beginning balance, immediate recovery · reinvestment at par through Q20 · pool liquidates at par at maturity.<br>
+          <b>Liabilities</b> — AAA 63% +150 · AA 12% +190 · A 6% +250 · BBB 5% +360 · BB 4% +700 · equity 10% residual.<br>
+          <b>OC triggers</b> — senior 1.17× (initial 1.235×) · junior 1.04× (initial 1.111×); breach diverts interest to AAA paydown until cured.<br>
+          <span id="cashCheck"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===== ENGINE (validated against clo_engine.js node tests) =====
+const DEAL = {
+  poolSize: 500e6, assetSpread: 0.0385, baseRate: 0.04,
+  nQuarters: 32, reinvestEnd: 20, seniorFee: 0.004, subFee: 0.001,
+  tranches: [
+    { name: 'AAA', pct: 0.63, spread: 0.0150 }, { name: 'AA', pct: 0.12, spread: 0.0190 },
+    { name: 'A', pct: 0.06, spread: 0.0250 },   { name: 'BBB', pct: 0.05, spread: 0.0360 },
+    { name: 'BB', pct: 0.04, spread: 0.0700 },  { name: 'EQ', pct: 0.10, spread: null },
+  ],
+  ocSeniorTrigger: 1.17, ocJuniorTrigger: 1.04,
+};
+function qr(rate) { return 1 - Math.pow(1 - rate, 0.25); }
+function runDeal(p) {
+  const d = DEAL;
+  const bal = d.tranches.map(t => t.pct * d.poolSize);
+  const eqIdx = d.tranches.length - 1;
+  let collateral = d.poolSize, cumDefaults = 0, cumLosses = 0;
+  const hist = { collateral: [collateral], tranches: d.tranches.map((t, i) => [bal[i]]),
+    eqCF: [-bal[eqIdx]], ocSenior: [], ocJunior: [], ocSeniorPass: [], ocJuniorPass: [], checks: [],
+    trancheIntPaid: d.tranches.map(() => 0), trancheIntDue: d.tranches.map(() => 0), steps: [] };
+  for (let t = 1; t <= d.nQuarters; t++) {
+    const steps = [];
+    const defaults = collateral * qr(p.cdr);
+    const recoveries = defaults * p.recovery;
+    cumDefaults += defaults; cumLosses += defaults - recoveries;
+    const afterDef = collateral - defaults;
+    const prepays = afterDef * qr(p.cpr);
+    const interestColl = collateral * (d.baseRate + d.assetSpread) / 4;
+    let principalColl = recoveries + prepays;
+    collateral = afterDef - prepays;
+    if (t === d.nQuarters) { principalColl += collateral; collateral = 0; }
+    let reinvested = 0;
+    if (t <= d.reinvestEnd && t < d.nQuarters) { reinvested = principalColl; collateral += principalColl; principalColl = 0; }
+    let cash = interestColl;
+    const totalColl = collateral + principalColl;
+    const pay = a => { const x = Math.min(cash, a); cash -= x; return x; };
+    steps.push({ kind: 'source', label: 'Interest collections', amt: interestColl, defaults, reinvested });
+    const feeDue = totalColl * d.seniorFee / 4;
+    const feePaid = pay(feeDue);
+    let distributed = feePaid;
+    steps.push({ kind: 'pay', label: 'Senior management fee', paid: feePaid, due: feeDue });
+    const intDue = d.tranches.map((tr, i) => tr.spread === null ? 0 : bal[i] * (d.baseRate + tr.spread) / 4);
+    for (let i = 0; i < 3; i++) { // AAA, AA, A — senior OC test sits before BBB per priority of payments
+      const paid = pay(intDue[i]);
+      hist.trancheIntPaid[i] += paid; hist.trancheIntDue[i] += intDue[i]; distributed += paid;
+      steps.push({ kind: 'pay', tranche: d.tranches[i].name, label: d.tranches[i].name + ' interest', paid, due: intDue[i] });
+    }
+    const seniorDebt = bal[0] + bal[1] + bal[2];
+    const juniorDebt = seniorDebt + bal[3] + bal[4];
+    const ocS = seniorDebt > 0 ? totalColl / seniorDebt : Infinity;
+    const ocJ = juniorDebt > 0 ? totalColl / juniorDebt : Infinity;
+    hist.ocSenior.push(ocS); hist.ocJunior.push(ocJ);
+    hist.ocSeniorPass.push(ocS >= d.ocSeniorTrigger); hist.ocJuniorPass.push(ocJ >= d.ocJuniorTrigger);
+    let divS = 0;
+    if (ocS < d.ocSeniorTrigger && cash > 0) {
+      const need = seniorDebt - totalColl / d.ocSeniorTrigger;
+      divS = Math.min(cash, Math.max(0, need), bal[0]);
+      bal[0] -= divS; cash -= divS; distributed += divS;
+    }
+    steps.push({ kind: 'gate', label: 'Senior OC test', ratio: ocS, trigger: d.ocSeniorTrigger, pass: ocS >= d.ocSeniorTrigger, diverted: divS });
+    for (const i of [3, 4]) { // BBB then BB
+      const paid = pay(intDue[i]);
+      hist.trancheIntPaid[i] += paid; hist.trancheIntDue[i] += intDue[i]; distributed += paid;
+      steps.push({ kind: 'pay', tranche: d.tranches[i].name, label: d.tranches[i].name + ' interest', paid, due: intDue[i] });
+    }
+    let divJ = 0;
+    if (ocJ < d.ocJuniorTrigger && cash > 0) {
+      const jd = bal[0] + bal[1] + bal[2] + bal[3] + bal[4];
+      const need = jd - totalColl / d.ocJuniorTrigger;
+      divJ = Math.min(cash, Math.max(0, need), bal[0]);
+      bal[0] -= divJ; cash -= divJ; distributed += divJ;
+    }
+    steps.push({ kind: 'gate', label: 'Junior OC test', ratio: ocJ, trigger: d.ocJuniorTrigger, pass: ocJ >= d.ocJuniorTrigger, diverted: divJ });
+    const subDue = totalColl * d.subFee / 4;
+    const subPaid = pay(subDue);
+    distributed += subPaid;
+    steps.push({ kind: 'pay', label: 'Subordinated management fee', paid: subPaid, due: subDue });
+    let eqCash = cash; distributed += cash; cash = 0;
+    let prin = principalColl;
+    const prinPaid = [];
+    for (let i = 0; i < 5 && prin > 0; i++) {
+      const x = Math.min(prin, bal[i]);
+      if (x > 0) prinPaid.push({ name: d.tranches[i].name, amt: x });
+      bal[i] -= x; prin -= x; distributed += x;
+    }
+    eqCash += prin; distributed += prin;
+    steps.push({ kind: 'prin', label: 'Principal waterfall', total: principalColl, reinvested, paid: prinPaid, residual: prin });
+    steps.push({ kind: 'eq', label: 'Equity — residual', amt: eqCash });
+    hist.steps.push(steps);
+    hist.checks.push(Math.abs(interestColl + principalColl - distributed) < 1e-6);
+    hist.eqCF.push(eqCash); hist.collateral.push(collateral);
+    d.tranches.forEach((tr, i) => hist.tranches[i].push(bal[i]));
+  }
+  const losses = d.tranches.map((tr, i) => bal[i]);
+  const eqIRRq = irr(hist.eqCF);
+  return { hist, losses, cumDefaults, cumLosses,
+    eqIRR: eqIRRq === null ? null : Math.pow(1 + eqIRRq, 4) - 1,
+    intShortfall: d.tranches.map((tr, i) => hist.trancheIntDue[i] - hist.trancheIntPaid[i]) };
+}
+function irr(cfs) {
+  const npv = r => cfs.reduce((s, c, i) => s + c / Math.pow(1 + r, i), 0);
+  let lo = -0.99, hi = 5;
+  if (npv(lo) * npv(hi) > 0) return npv(0) > 0 ? hi : null;
+  for (let k = 0; k < 200; k++) { const mid = (lo + hi) / 2;
+    if (npv(lo) * npv(mid) <= 0) hi = mid; else lo = mid; }
+  return (lo + hi) / 2;
+}
+
+// ===== SVG CHART LIB (dependency-free) =====
+const W = 860, PAD = { l: 62, r: 16, t: 12, b: 34 };
+function sx(t, T) { return PAD.l + t / T * (W - PAD.l - PAD.r); }
+function svgAxes(h, T, yTicks, yFmt) {
+  let s = '';
+  for (const yt of yTicks) {
+    s += '<line x1="' + PAD.l + '" x2="' + (W - PAD.r) + '" y1="' + yt.px + '" y2="' + yt.px + '" stroke="#1c2b23"/>';
+    s += '<text x="' + (PAD.l - 8) + '" y="' + (yt.px + 3) + '" text-anchor="end">' + yFmt(yt.v) + '</text>';
+  }
+  for (let t = 0; t <= T; t += 4) {
+    s += '<text x="' + sx(t, T) + '" y="' + (h - PAD.b + 16) + '" text-anchor="middle">' + t + '</text>';
+  }
+  s += '<text x="' + (W / 2) + '" y="' + (h - 4) + '" text-anchor="middle">Quarter</text>';
+  return s;
+}
+function buildStackSVG(r) {
+  const h = 330, T = DEAL.nQuarters;
+  const ymax = DEAL.poolSize * 1.04;
+  const sy = v => PAD.t + (1 - v / ymax) * (h - PAD.t - PAD.b);
+  // stack bottom-up: EQ (first-loss) at bottom, AAA on top
+  const order = [5, 4, 3, 2, 1, 0];
+  let cumPrev = new Array(T + 1).fill(0);
+  let paths = '';
+  for (const idx of order) {
+    const cum = cumPrev.map((c, t) => c + r.hist.tranches[idx][t]);
+    let top = '', bot = '';
+    for (let t = 0; t <= T; t++) top += (t ? 'L' : 'M') + sx(t, T).toFixed(1) + ',' + sy(cum[t]).toFixed(1);
+    for (let t = T; t >= 0; t--) bot += 'L' + sx(t, T).toFixed(1) + ',' + sy(cumPrev[t]).toFixed(1);
+    paths += '<path d="' + top + bot + 'Z" fill="' + COLORS[DEAL.tranches[idx].name] + 'bb" stroke="' + COLORS[DEAL.tranches[idx].name] + '" stroke-width="0.5"/>';
+    cumPrev = cum;
+  }
+  let coll = '';
+  for (let t = 0; t <= T; t++) coll += (t ? 'L' : 'M') + sx(t, T).toFixed(1) + ',' + sy(r.hist.collateral[t]).toFixed(1);
+  paths += '<path d="' + coll + '" fill="none" stroke="#e8e3d3" stroke-width="1.6" stroke-dasharray="2 4"/>';
+  const yTicks = [0, 125e6, 250e6, 375e6, 500e6].map(v => ({ v, px: sy(v) }));
+  return '<svg viewBox="0 0 ' + W + ' ' + h + '" width="100%">' + svgAxes(h, T, yTicks, v => '$' + (v / 1e6) + 'M') + paths + '</svg>';
+}
+function buildEqSVG(r) {
+  const h = 230, T = DEAL.nQuarters;
+  const eq = r.hist.eqCF.slice(1);
+  const ymax = Math.max(2e6, Math.max(...eq)) * 1.12;
+  const sy = v => PAD.t + (1 - v / ymax) * (h - PAD.t - PAD.b);
+  const bw = (W - PAD.l - PAD.r) / T * 0.62;
+  let bars = '';
+  eq.forEach((v, i) => {
+    const x = sx(i + 1, T) - bw / 2, y = sy(Math.max(0, v));
+    bars += '<rect x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + Math.max(0, sy(0) - y).toFixed(1) + '" fill="#c94f4f" opacity="0.9" rx="1"/>';
+  });
+  const step = ymax > 8e6 ? 4e6 : ymax > 4e6 ? 2e6 : 1e6;
+  const yTicks = []; for (let v = 0; v <= ymax; v += step) yTicks.push({ v, px: sy(v) });
+  return '<svg viewBox="0 0 ' + W + ' ' + h + '" width="100%">' + svgAxes(h, T, yTicks, v => '$' + (v / 1e6).toFixed(0) + 'M') + bars + '</svg>';
+}
+function buildOCSVG(r) {
+  const h = 240, T = DEAL.nQuarters;
+  const y0 = 0.9, y1 = 1.6;
+  const sy = v => PAD.t + (1 - (Math.min(v, y1) - y0) / (y1 - y0)) * (h - PAD.t - PAD.b);
+  function line(arr, color, dash) {
+    let p = '';
+    arr.forEach((v, i) => { p += (i ? 'L' : 'M') + sx(i + 1, T).toFixed(1) + ',' + sy(v).toFixed(1); });
+    return '<path d="' + p + '" fill="none" stroke="' + color + '" stroke-width="2"' + (dash ? ' stroke-dasharray="5 4" stroke-width="1"' : '') + '/>';
+  }
+  let s = line(r.hist.ocSenior, '#5b8dbe') + line(r.hist.ocJunior, '#d9a441');
+  s += line(new Array(T).fill(DEAL.ocSeniorTrigger), '#5b8dbe', true);
+  s += line(new Array(T).fill(DEAL.ocJuniorTrigger), '#d9a441', true);
+  const yTicks = [0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6].map(v => ({ v, px: sy(v) }));
+  return '<svg viewBox="0 0 ' + W + ' ' + h + '" width="100%">' + svgAxes(h, T, yTicks, v => v.toFixed(2) + '×') + s + '</svg>';
+}
+
+// ===== UI =====
+const COLORS = { AAA: '#5b8dbe', AA: '#6fa3cf', A: '#8cb8dd', BBB: '#b3d0e8', BB: '#d9a441', EQ: '#c94f4f' };
+const fm = x => '$' + (x / 1e6).toFixed(2) + 'M';
+let RESULT = null, playTimer = null;
+function params() {
+  return { cdr: +document.getElementById('cdr').value / 100,
+           recovery: +document.getElementById('rec').value / 100,
+           cpr: +document.getElementById('cpr').value / 100 };
+}
+function preset(btn, c, r, p) {
+  document.querySelectorAll('.presets button').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  document.getElementById('cdr').value = c; document.getElementById('rec').value = r;
+  document.getElementById('cpr').value = p; redraw();
+}
+function togglePlay() {
+  const btn = document.getElementById('playBtn');
+  if (playTimer) { clearInterval(playTimer); playTimer = null; btn.textContent = '▶  Play deal life'; return; }
+  btn.textContent = '⏸  Pause';
+  let t = +document.getElementById('qtr').value;
+  if (t >= 32) t = 0;
+  playTimer = setInterval(() => {
+    t++;
+    document.getElementById('qtr').value = t;
+    renderCascade(t, true);
+    if (t >= 32) togglePlay();
+  }, 700);
+}
+function renderCascade(t, lite) {
+  const steps = RESULT.hist.steps[t - 1];
+  const yr = Math.ceil(t / 4);
+  document.getElementById('qLabel').textContent = 'Quarter ' + t + ' · Year ' + yr + (t <= DEAL.reinvestEnd ? ' · reinvesting' : ' · amortizing');
+  const el = document.getElementById('cascade');
+  let html = lite ? '' : '<div class="drop"></div>';
+  let i = 0;
+  const src = steps[0];
+  html += node(i++, lite,
+    '<div class="nm">Collections in <b>' + fm(src.amt) + '</b> interest' +
+    (src.defaults > 5e4 ? ' · <span style="color:var(--red)">defaults ' + fm(src.defaults) + '</span>' : '') + '</div>' +
+    '<div class="amt">' + fm(src.amt) + '</div>', '', 'paidfull');
+  for (const s of steps.slice(1)) {
+    if (s.kind === 'pay') {
+      const w = s.due > 1 ? Math.min(100, 100 * s.paid / s.due) : 100;
+      const cls = s.due > 1 && s.paid < s.due - 1 ? 'short' : (w >= 99.9 ? 'paidfull' : '');
+      const col = s.tranche ? COLORS[s.tranche] : 'var(--gold)';
+      html += node(i++, lite,
+        '<div class="nm"><b style="color:' + col + '">' + s.label + '</b></div>' +
+        '<div class="amt">' + fm(s.paid) + (s.due > 1 && s.paid < s.due - 1 ? ' <span style="font-size:10px">of ' + fm(s.due) + '</span>' : '') + '</div>',
+        '<div class="bar"><i style="--w:' + w + '"></i></div>', cls);
+    } else if (s.kind === 'gate') {
+      const chip = '<span class="gatechip ' + (s.pass ? 'pass' : 'fail') + '">' + (s.pass ? 'pass' : 'fail') + '</span>';
+      let extra = '';
+      if (!s.pass && s.diverted > 1) extra =
+        '<div class="divert">⤷ cash seized — <b>' + fm(s.diverted) + '</b> diverted to AAA principal paydown</div>';
+      else if (!s.pass) extra = '<div class="divert">⤷ failing — no interest cash left to divert</div>';
+      html += node(i++, lite,
+        '<div class="nm"><b>' + s.label + '</b> &nbsp;' + s.ratio.toFixed(3) + '× vs ' + s.trigger.toFixed(2) + '×</div>' +
+        '<div class="amt">' + chip + '</div>' + extra, '', 'gate ' + (s.pass ? 'pass' : 'fail'));
+    } else if (s.kind === 'prin') {
+      let body;
+      if (s.reinvested > 1) body = '<span class="princhip">reinvested into new loans <b>' + fm(s.reinvested) + '</b></span>';
+      else if (s.paid.length === 0 && s.total < 1) body = '<span class="princhip">no principal collections</span>';
+      else body = s.paid.map(x => '<span class="princhip" style="border-color:' + COLORS[x.name] + '"><b style="color:' + COLORS[x.name] + '">' + x.name + '</b> −' + fm(x.amt) + '</span>').join('') +
+        (s.residual > 1 ? '<span class="princhip" style="border-color:#c94f4f"><b style="color:#c94f4f">EQ</b> +' + fm(s.residual) + '</span>' : '');
+      html += node(i++, lite,
+        '<div class="nm"><b>Principal collections</b> ' + (s.reinvested > 1 ? '(reinvestment period)' : '(sequential paydown)') + '</div>' +
+        '<div class="amt">' + fm(s.reinvested > 1 ? s.reinvested : s.total) + '</div>' +
+        '<div class="prinlist">' + body + '</div>', '', '');
+    } else if (s.kind === 'eq') {
+      html += node(i++, lite,
+        '<div class="nm"><b>Equity — the residual claim</b></div>' +
+        '<div class="amt" style="color:#c94f4f;font-weight:600">' + fm(s.amt) + '</div>',
+        '<div class="bar"><i style="--w:' + Math.min(100, 100 * s.amt / 4e6) + '"></i></div>', 'eqnode');
+    }
+  }
+  el.innerHTML = html;
+}
+function node(i, lite, inner, bar, cls) {
+  const style = lite ? 'style="--i:0;animation-duration:.01s"' : 'style="--i:' + i + '"';
+  return '<div class="node ' + cls + '" ' + style + '>' + inner + bar + '</div>';
+}
+function redraw() {
+  const p = params();
+  document.getElementById('cdrV').textContent = (p.cdr * 100).toFixed(1) + '%';
+  document.getElementById('recV').textContent = (p.recovery * 100).toFixed(0) + '%';
+  document.getElementById('cprV').textContent = (p.cpr * 100).toFixed(0) + '%';
+  RESULT = runDeal(p);
+  const r = RESULT;
+  const irrEl = document.getElementById('kIrr');
+  irrEl.textContent = r.eqIRR === null ? 'Wiped' : (r.eqIRR * 100).toFixed(1) + '%';
+  irrEl.className = 'val ' + (r.eqIRR === null || r.eqIRR < 0 ? 'bad' : r.eqIRR < 0.08 ? 'warn' : 'ok');
+  document.getElementById('kLoss').textContent = fm(r.cumLosses);
+  const breaches = r.hist.ocSeniorPass.filter(x => !x).length + r.hist.ocJuniorPass.filter(x => !x).length;
+  const ocEl = document.getElementById('kOc');
+  ocEl.textContent = breaches + ' / 64'; ocEl.className = 'val ' + (breaches ? 'warn' : 'ok');
+  const impaired = DEAL.tranches.slice(0, 5).map((t, i) => r.losses[i] > 1 ? t.name : null).filter(Boolean);
+  const impEl = document.getElementById('kImp');
+  impEl.textContent = impaired.length ? impaired[0] : (r.eqIRR !== null && r.eqIRR >= 0 ? 'None' : 'Equity');
+  impEl.className = 'val ' + (impaired.length ? 'bad' : (r.eqIRR !== null && r.eqIRR >= 0 ? 'ok' : 'warn'));
+  renderCascade(+document.getElementById('qtr').value);
+  document.getElementById('stack').innerHTML = buildStackSVG(r);
+  document.getElementById('stackLegend').innerHTML =
+    DEAL.tranches.map(t => '<span style="color:' + COLORS[t.name] + '">' + t.name + '</span>').join('') +
+    '<span style="color:var(--faint)">dotted = collateral</span>';
+  document.getElementById('eqcf').innerHTML = buildEqSVG(r);
+  if (document.getElementById('deepdive').classList.contains('open')) {
+    document.getElementById('octests').innerHTML = buildOCSVG(r);
+    const allOk = r.hist.checks.every(c => c);
+    document.getElementById('cashCheck').innerHTML =
+      '<b>Validation</b> — cash conservation (sources = uses, every quarter): ' +
+      (allOk ? '<span class="badge pass">PASS 32/32</span>' : '<span class="badge fail">FAIL</span>');
+  }
+  const rows = DEAL.tranches.map((t, i) => {
+    const size = t.pct * DEAL.poolSize;
+    const isEq = t.spread === null;
+    const loss = r.losses[i], shortfall = r.intShortfall[i];
+    const status = isEq
+      ? (r.eqIRR === null ? '<span class="bad">wiped</span>' : '<span class="' + (r.eqIRR < 0 ? 'bad' : 'ok') + '">' + (r.eqIRR * 100).toFixed(1) + '%</span>')
+      : (loss > 1 ? '<span class="bad">−' + fm(loss) + '</span>' : shortfall > 1 ? '<span class="warn">shortfall</span>' : '<span class="ok">whole</span>');
+    return '<tr><td style="color:' + COLORS[t.name] + ';font-weight:600">' + t.name + '</td>' +
+      '<td>' + fm(size) + '</td><td>' + (isEq ? 'residual' : '+' + (t.spread * 1e4).toFixed(0) + 'bp') + '</td><td>' + status + '</td></tr>';
+  }).join('');
+  document.getElementById('trancheTable').innerHTML =
+    '<tr><th>Tranche</th><th>Size</th><th>Coupon</th><th>Outcome</th></tr>' + rows;
+}
+['cdr', 'rec', 'cpr'].forEach(id => document.getElementById(id).addEventListener('input', () => {
+  document.querySelectorAll('.presets button').forEach(b => b.classList.remove('active'));
+  redraw();
+}));
+document.getElementById('qtr').addEventListener('input', e => renderCascade(+e.target.value));
+redraw();
+</script>
+</body>
+</html>
